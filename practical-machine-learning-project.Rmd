@@ -1,0 +1,110 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Yasuhiro HARA"
+date: "2021/9/23"
+output: html_document
+---
+# Summary
+
+In this project, we would predict the "classe" variable in "Human Activity Recognition" data set. We used Random Forest approach to predict the variable, and our prediction model showed 99.23% accuracy.
+
+Note: The data is  can be downloaded from the link below.
+
+http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har
+
+# Data preprocessing
+```{r, message=FALSE, warning=FALSE}
+#rm(list = ls())
+library(data.table)
+library(doParallel)
+library(caret)
+library(corrplot)
+library(rattle)
+set.seed(0)
+```
+
+## Data Loading
+```{r, warning=FALSE}
+train_raw <- read.csv("pml-training.csv")
+test_raw <- read.csv("pml-testing.csv")
+```
+
+## Data Cleaning
+First, we remove variables which includes NAs and near zero variance.
+```{r, message=FALSE, warning=FALSE}
+train_cleaned <- train_raw[,colMeans(is.na(train_raw)) < .9]
+train_cleaned <- train_cleaned[,-c(1:7)]
+```
+
+```{r}
+nzv <- nearZeroVar(train_cleaned)
+train_cleaned <- train_cleaned[,-nzv]
+dim(train_cleaned)
+```
+
+## Data slicing
+Then, we split the training set in order to validate our model later on.
+```{r}
+inTrain <- createDataPartition(y = train_cleaned$classe, p = 0.75, list = F)
+train <- train_cleaned[inTrain,]
+valid <- train_cleaned[-inTrain,]
+```
+
+# EDA
+Now that we have cleaned the dataset off absolutely useless varibles, we shall look at the dependence of these variables on each other through a correlation plot.
+```{r}
+cor_mat <- cor(train[, -53])
+corrplot(cor_mat, order = "FPC", method = "color", type = "upper", 
+         tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+```
+
+
+# Model Selection
+We will use 2 methods to model the training set and thereby choose the one having the best accuracy to predict the outcome variable in the testing set. The methods are Decision Tree and Random Forest.
+
+```{r}
+control <- trainControl(method="cv", number=3, verboseIter=F)
+```
+
+## Decision Tree
+Model: 
+```{r}
+mod_trees <- train(classe~., data=train, method="rpart", trControl = control, tuneLength = 5)
+fancyRpartPlot(mod_trees$finalModel)
+```
+
+Prediction: 
+```{r}
+pred_trees <- predict(mod_trees, valid)
+cmtrees <- confusionMatrix(pred_trees, factor(valid$classe))
+cmtrees
+```
+
+
+## Random Forest
+Model: 
+```{r}
+mod_rf <- train(classe~., data=train, method="rf", trControl = control, tuneLength = 5)
+```
+
+Prediction: 
+```{r}
+pred_rf <- predict(mod_rf, valid)
+cmrf <- confusionMatrix(pred_rf, factor(valid$classe))
+cmrf
+```
+
+Since Random Forest showed much higher accuracy, we choose Random Forest method to predict the data.
+
+However, we plot the model just in case it might be overfitting.
+```{r}
+plot(mod_rf)
+```
+
+# Prediction
+The prediction using the Random Forest method is shown below.
+```{r}
+pred <- predict(mod_rf, test_raw)
+print(pred)
+```
+
